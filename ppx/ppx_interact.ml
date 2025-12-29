@@ -34,6 +34,20 @@ let var_names_of =
       match p.ppat_desc with Ppat_var { txt; _ } -> txt :: acc | _ -> acc
   end
 
+let unflatten_ident = function
+  | x :: l -> List.fold_left (fun acc s -> Ldot (acc, s)) (Lident x) l
+  | _ -> failwith "ident must contain at least one segment"
+
+let rec remove_common a b =
+  match (a, b) with
+  | x :: a', y :: b' when x = y -> remove_common a' b'
+  | _ -> (a, b)
+
+let relativize_ident ident ctx =
+  let flat = Longident.flatten_exn ident in
+  let flat', _ = remove_common flat (List.rev ctx) in
+  unflatten_ident flat'
+
 let traverse () =
   object
     inherit [env] Ast_traverse.fold_map as super
@@ -96,17 +110,11 @@ let traverse () =
       | Pexp_extension ({ txt = s; _ }, payload) when String.equal s "interact"
         ->
         let loc = e.pexp_loc in
-        let elt (name, original_ctx, ident) =
+        let elt (name, _original_ctx, ident) =
           let s = Exp.constant ~loc (Const.string ~loc name) in
           let id =
             Exp.ident ~loc
-              {
-                txt =
-                  (* check at the use site if we're still in that module, if so don't qualify *)
-                  (if env.module_context != original_ctx then ident
-                  else Lident name);
-                loc;
-              }
+              { txt = relativize_ident ident env.module_context; loc }
           in
           [%expr V ([%e s], [%e id])]
         in

@@ -26,6 +26,10 @@ module A = struct
   module C = struct
     let nested = 1
   end
+
+  let foo a =
+    let b = [%interact] in
+    a + b
 end
 
 let a () =
